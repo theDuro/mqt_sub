@@ -1,0 +1,106 @@
+import json
+import psycopg2
+import traceback
+from datetime import datetime
+from dataclasses import dataclass
+import paho.mqtt.client as mqtt
+
+# Konfiguracja bazy danych (Azure PostgreSQL)
+DB_CONFIG = {
+    "dbname": "postgres",
+    "user": "autosoft",
+    "password": "Test1234!",
+    "host": "autosoft.postgres.database.azure.com",
+    "port": 5432,
+    "sslmode": "require"
+}
+
+# Dane maszyny
+@dataclass
+class MachineData:
+    machine_id: int
+    is_running: bool
+    has_error: bool
+    cycle_completed: int
+    tag1: float
+    tag2: float
+    tag3: float
+    tag4: float
+    timestamp: datetime = datetime.now()
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MachineData":
+        return cls(
+            machine_id=data["machine_id"],
+            is_running=data["is_running"],
+            has_error=data["has_error"],
+            cycle_completed=data["cycle_completed"],
+            tag1=data["tag1"],
+            tag2=data["tag2"],
+            tag3=data["tag3"],
+            tag4=data["tag4"],
+            timestamp=datetime.now()
+        )
+
+# Zapis do bazy danych
+def add_machine_data(machine_data: MachineData):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO machine_data (
+                machine_id, is_running, has_error, cycle_completed,
+                tag1, tag2, tag3, tag4, timestamp
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            machine_data.machine_id,
+            machine_data.is_running,
+            machine_data.has_error,
+            machine_data.cycle_completed,
+            machine_data.tag1,
+            machine_data.tag2,
+            machine_data.tag3,
+            machine_data.tag4,
+            machine_data.timestamp
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"✅ Dane zapisane: {machine_data}")
+    except Exception as e:
+        print("❌ Błąd zapisu do bazy:", e)
+        traceback.print_exc()
+
+# Obsługa wiadomości MQTT
+def on_message(client, userdata, msg):
+    try:
+        payload = msg.payload.decode()
+        print(f"📥 Odebrano z MQTT ({msg.topic}): {payload}")
+        data = json.loads(payload)
+        machine = MachineData.from_dict(data)
+        add_machine_data(machine)
+    except json.JSONDecodeError:
+        print("⚠️ Nieprawidłowy JSON")
+    except Exception as e:
+        print("❌ Błąd obsługi wiadomości:", e)
+        traceback.print_exc()
+
+# Konfiguracja MQTT
+def start_mqtt():
+    broker = "test.mosquitto.org"  # Możesz podać swój, np. z Azure
+    topic = "maszyna/dane"         # Ustal swój temat
+
+    client = mqtt.Client(protocol=mqtt.MQTTv5)  # Używamy nowoczesnej wersji API
+    client.on_message = on_message
+
+    try:
+        client.connect(broker, 1883, 60)
+        client.subscribe(topic)
+        print(f"🚀 Subskrybowanie tematu: {topic}")
+        client.loop_forever()
+    except Exception as e:
+        print("❌ Błąd połączenia z brokerem MQTT:", e)
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    start_mqtt()
