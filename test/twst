@@ -87,14 +87,14 @@ def on_message(client, userdata, msg):
 
 # Konfiguracja MQTT
 def start_mqtt():
-    broker = "test.mosquitto.org"  # Możesz podać swój, np. z Azure
-    topic = "maszyna/dane"         # Ustal swój temat
+    broker = "74.248.76.140"  # Adres IP Twojego brokera w Azure
+    topic = "maszyna/dane"    # Twój temat MQTT
 
-    client = mqtt.Client(protocol=mqtt.MQTTv5)  # Używamy nowoczesnej wersji API
+    client = mqtt.Client(protocol=mqtt.MQTTv5)  # Używamy MQTT v5
     client.on_message = on_message
 
     try:
-        client.connect(broker, 1883, 60)
+        client.connect(broker, 1883, 60)  # port, keepalive
         client.subscribe(topic)
         print(f"🚀 Subskrybowanie tematu: {topic}")
         client.loop_forever()
